@@ -275,14 +275,31 @@ def preprocess_new_data(df_new, feature_names, scaler):
 
     df_proc = df_new[feature_names].copy()
 
-    # Encode if needed
-    if df_proc['Email_Opt_In'].dtype == 'object' or df_proc['Email_Opt_In'].dtype == 'bool':
-        df_proc['Email_Opt_In'] = df_proc['Email_Opt_In'].map(
-            {True:1, False:0, 'True':1, 'False':0, 'Yes':1, 'No':0, 'Si':1}).fillna(0).astype(int)
+    # Encode categoricals robustly (text, bool, category, mixed).
+    email_map = {
+        'true': 1, 'false': 0, 'yes': 1, 'no': 0, 'si': 1, 'sí': 1, '1': 1, '0': 0
+    }
+    promo_map = {
+        'unsubscribed': 0, 'responded': 1, 'ignored': 2,
+        'desuscrito': 0, 'respondio': 1, 'respondió': 1, 'ignoro': 2, 'ignoró': 2,
+        '0': 0, '1': 1, '2': 2
+    }
 
-    if df_proc['Promotion_Response'].dtype == 'object':
-        df_proc['Promotion_Response'] = df_proc['Promotion_Response'].replace(
-            {'Unsubscribed':0, 'Responded':1, 'Ignored':2}).astype(int)
+    email_text = df_proc['Email_Opt_In'].astype(str).str.strip().str.lower()
+    email_num = pd.to_numeric(df_proc['Email_Opt_In'], errors='coerce')
+    df_proc['Email_Opt_In'] = email_text.map(email_map).where(email_text.map(email_map).notna(), email_num)
+
+    promo_text = df_proc['Promotion_Response'].astype(str).str.strip().str.lower()
+    promo_num = pd.to_numeric(df_proc['Promotion_Response'], errors='coerce')
+    df_proc['Promotion_Response'] = promo_text.map(promo_map).where(promo_text.map(promo_map).notna(), promo_num)
+
+    # Ensure every feature is numeric before inference.
+    for col in feature_names:
+        df_proc[col] = pd.to_numeric(df_proc[col], errors='coerce')
+
+    invalid_cols = [col for col in feature_names if df_proc[col].isna().any()]
+    if invalid_cols:
+        return None, [f"{c} (valor inválido o vacío)" for c in invalid_cols]
 
     # No escalar aqui — el Pipeline del modelo lo hace internamente
     return df_proc, []
@@ -747,10 +764,11 @@ elif page == "🔮 Churn Prediction":
             if missing:
                 st.markdown(f"""
                 <div class="alert-friendly">
-                    📋 <strong>Datos incompletos</strong><br>
-                    El archivo no contiene las siguientes características necesarias para la predicción:<br>
+                    📋 <strong>No se pudo procesar el archivo</strong><br>
+                    Revisa estas características (faltantes, vacías o con valores no válidos):<br>
                     <strong>{', '.join(missing)}</strong><br><br>
-                    Por favor, asegúrate de que tu archivo incluya todas las columnas requeridas.
+                    Asegúrate de incluir todas las columnas requeridas y usar valores numéricos
+                    (o categorías válidas en variables categóricas).
                     Puedes ver la lista completa en el desplegable "Características requeridas" arriba.
                 </div>
                 """, unsafe_allow_html=True)
