@@ -347,24 +347,28 @@ def generate_recommendations(row, prob):
 
 def generate_pdf_report(results_df, store_name, analyst, model_name):
     """Generate PDF report of predictions."""
+    def _safe_pdf_text(value):
+        # Helvetica in FPDF is latin-1; replace unsupported unicode chars (e.g., emojis).
+        return str(value).encode('latin-1', errors='replace').decode('latin-1')
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font('Helvetica', 'B', 18)
-    pdf.cell(0, 15, 'Customer Churn Prediction Report', ln=True, align='C')
+    pdf.cell(0, 15, _safe_pdf_text('Customer Churn Prediction Report'), ln=True, align='C')
     pdf.set_font('Helvetica', '', 11)
-    pdf.cell(0, 8, f'Comercio: {store_name} | Analista: {analyst}', ln=True, align='C')
-    pdf.cell(0, 8, f'Modelo: {model_name} | Fecha: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True, align='C')
+    pdf.cell(0, 8, _safe_pdf_text(f'Comercio: {store_name} | Analista: {analyst}'), ln=True, align='C')
+    pdf.cell(0, 8, _safe_pdf_text(f'Modelo: {model_name} | Fecha: {datetime.now().strftime("%Y-%m-%d %H:%M")}'), ln=True, align='C')
     pdf.ln(5)
 
     # Summary
     total = len(results_df)
     churn_count = results_df['Prediccion'].sum() if 'Prediccion' in results_df.columns else 0
     pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 10, 'Resumen Ejecutivo', ln=True)
+    pdf.cell(0, 10, _safe_pdf_text('Resumen Ejecutivo'), ln=True)
     pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 7, f'Total clientes evaluados: {total}', ln=True)
-    pdf.cell(0, 7, f'Clientes en riesgo de churn: {churn_count} ({churn_count/max(total,1)*100:.1f}%)', ln=True)
-    pdf.cell(0, 7, f'Clientes estables: {total - churn_count} ({(total-churn_count)/max(total,1)*100:.1f}%)', ln=True)
+    pdf.cell(0, 7, _safe_pdf_text(f'Total clientes evaluados: {total}'), ln=True)
+    pdf.cell(0, 7, _safe_pdf_text(f'Clientes en riesgo de churn: {churn_count} ({churn_count/max(total,1)*100:.1f}%)'), ln=True)
+    pdf.cell(0, 7, _safe_pdf_text(f'Clientes estables: {total - churn_count} ({(total-churn_count)/max(total,1)*100:.1f}%)'), ln=True)
     pdf.ln(5)
 
     # Table
@@ -376,7 +380,7 @@ def generate_pdf_report(results_df, store_name, analyst, model_name):
 
     col_w = 180 / max(len(cols_to_show), 1)
     for c in cols_to_show:
-        pdf.cell(col_w, 8, str(c)[:20], border=1, align='C')
+        pdf.cell(col_w, 8, _safe_pdf_text(str(c)[:20]), border=1, align='C')
     pdf.ln()
 
     pdf.set_font('Helvetica', '', 9)
@@ -385,10 +389,15 @@ def generate_pdf_report(results_df, store_name, analyst, model_name):
             val = row.get(c, '')
             if isinstance(val, float):
                 val = f'{val:.4f}'
-            pdf.cell(col_w, 7, str(val)[:25], border=1, align='C')
+            pdf.cell(col_w, 7, _safe_pdf_text(str(val)[:25]), border=1, align='C')
         pdf.ln()
 
-    return pdf.output()
+    out = pdf.output()
+    if isinstance(out, bytearray):
+        return bytes(out)
+    if isinstance(out, str):
+        return out.encode('latin-1', errors='replace')
+    return out
 
 # ──────────────────────────────────────────────
 # LOAD DATASET
